@@ -1,0 +1,23 @@
+version: v2
+inputs:
+  - directory: proto
+plugins:
+  # Python: raw protobuf message classes
+  - remote: buf.build/protocolbuffers/python
+    out: generated/python
+
+  # Python: gRPC service stubs (for connectrpc server implementation)
+  - remote: buf.build/grpc/python
+    out: generated/python
+
+  # TypeScript: protobuf message classes (protobuf-es)
+  - remote: buf.build/bufbuild/es
+    out: generated/ts
+    opt:
+      - target=ts
+
+  # TypeScript: ConnectRPC service clients (connect-es)
+  - remote: buf.build/connectrpc/es
+    out: generated/ts
+    opt:
+      - target=ts

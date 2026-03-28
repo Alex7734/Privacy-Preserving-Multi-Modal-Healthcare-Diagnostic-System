@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package thesis.fhe.v1;
+
+
+message HeartFeatures {
+  float age       = 1;
+  float sex       = 2;
+  float cp        = 3;
+  float trestbps  = 4;
+  float chol      = 5;
+  float fbs       = 6;
+  float restecg   = 7;
+  float thalach   = 8;
+  float exang     = 9;
+  float oldpeak   = 10;
+  float slope     = 11;
+  float ca        = 12;
+  float thal      = 13;
+}
+
+message DiabetesFeatures {
+  float pregnancies                = 1;
+  float glucose                    = 2;
+  float blood_pressure             = 3;
+  float skin_thickness             = 4;
+  float insulin                    = 5;
+  float bmi                        = 6;
+  float diabetes_pedigree_function = 7;
+  float age                        = 8;
+}
+
+message EEGFeatures {
+  repeated float channels = 1;
+}
+
+message SymptomFeatures {
+  repeated float symptoms = 1;
+  int32          top_k    = 2;
+}

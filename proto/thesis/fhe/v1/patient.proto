@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package thesis.fhe.v1;
+
+import "google/protobuf/timestamp.proto";
+
+
+enum ModelType {
+  MODEL_TYPE_UNSPECIFIED = 0;
+  MODEL_TYPE_SYMPTOM     = 1;
+  MODEL_TYPE_HEART       = 2;
+  MODEL_TYPE_DIABETES    = 3;
+  MODEL_TYPE_EEG         = 4;
+}
+
+message TopKResult {
+  string    condition    = 1;
+  float     probability  = 2;
+  ModelType linked_model = 3;
+}
+
+message PredictionRecord {
+  string                    id             = 1;
+  google.protobuf.Timestamp timestamp      = 2;
+  ModelType                 model          = 3;
+  bool                      fhe_used       = 4;
+  repeated TopKResult       topk_results   = 5;
+  float                     confidence     = 6;
+  bool                      positive       = 7;
+  int64                     inference_ms   = 8;
+  int32                     n_bits         = 9;
+}
+
+message Patient {
+  string                    id              = 1;
+  string                    name            = 2;
+  string                    date_of_birth   = 3;
+  reserved                  4;
+  google.protobuf.Timestamp created_at      = 5;
+  repeated PredictionRecord history         = 6;
+  string                    cnp             = 7;
+  string                    medical_history = 8;
+}

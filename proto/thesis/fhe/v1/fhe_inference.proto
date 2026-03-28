@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package thesis.fhe.v1;
+
+import "thesis/fhe/v1/patient.proto";
+import "thesis/fhe/v1/models.proto";
+
+
+service FHEInferenceService {
+  rpc UploadEvaluationKeys(stream UploadEvalKeysRequest) returns (EvalKeyHandle);
+  rpc RunEncryptedInference(EncryptedInferenceRequest) returns (EncryptedInferenceResponse);
+  rpc RunPlaintextInference(PlaintextInferenceRequest) returns (PlaintextInferenceResponse);
+}
+
+message UploadEvalKeysRequest {
+  int32 n_bits = 3;
+  oneof payload {
+    ModelType model = 1;
+    bytes     chunk = 2;
+  }
+}
+
+message EvalKeyHandle {
+  string handle       = 1;
+  int64  expires_unix = 2;
+}
+
+message EncryptedInferenceRequest {
+  ModelType model           = 1;
+  bytes     ciphertext      = 2;
+  string    eval_key_handle = 3;
+}
+
+message EncryptedInferenceResponse {
+  bytes encrypted_result = 1;
+}
+
+message PlaintextInferenceRequest {
+  ModelType model = 1;
+  oneof features {
+    HeartFeatures    heart    = 2;
+    DiabetesFeatures diabetes = 3;
+    EEGFeatures      eeg      = 4;
+    SymptomFeatures  symptom  = 5;
+  }
+}
+
+message PlaintextInferenceResponse {
+  ModelType           model        = 1;
+  repeated TopKResult topk_results = 2;
+  float               confidence   = 3;
+  bool                positive     = 4;
+  int64               inference_ms = 5;
+}

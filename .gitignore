@@ -1,0 +1,54 @@
+# Notebook generation helpers 
+make_*.py
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Data (patient records)
+data/
+
+# Trained models and FHE circuits 
+models/
+
+# FHE private keys
+keys/
+
+# Runtime logs and PID files
+logs/
+
+# Training results 
+results/
+
+# Docs and research notes
+docs/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Datasets (large CSV files)
+datasets/*.csv
+datasets/*.zip
+
+# Notebooks
+*.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Concrete ML
+.artifacts/

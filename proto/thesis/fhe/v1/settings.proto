@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package thesis.fhe.v1;
+
+
+message Settings {
+  bool   fhe_enabled             = 1;
+  string inference_server_url    = 2;
+  int32  default_top_k           = 3;
+  int64  eval_key_ttl_seconds    = 4;
+}

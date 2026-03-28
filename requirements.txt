@@ -1,0 +1,22 @@
+# Core FHE + ML
+concrete-ml>=1.5.0
+scikit-learn>=1.3.0
+xgboost>=2.0.0
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.11.0
+
+# Server
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.0
+
+# Client HTTP
+httpx>=0.27.0
+
+# Serialisation
+dill>=0.3.7
+
+# Benchmarking / utilities
+psutil>=5.9.0
+tqdm>=4.66.0

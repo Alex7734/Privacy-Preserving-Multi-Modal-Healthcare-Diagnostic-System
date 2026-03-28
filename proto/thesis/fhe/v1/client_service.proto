@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+package thesis.fhe.v1;
+
+import "thesis/fhe/v1/patient.proto";
+import "thesis/fhe/v1/models.proto";
+import "thesis/fhe/v1/settings.proto";
+import "google/protobuf/timestamp.proto";
+
+
+service DoctorClientService {
+
+  rpc CreatePatient (CreatePatientRequest)  returns (Patient);
+  rpc GetPatient    (GetPatientRequest)     returns (Patient);
+  rpc ListPatients  (ListPatientsRequest)   returns (ListPatientsResponse);
+  rpc UpdatePatient (UpdatePatientRequest)  returns (Patient);
+  rpc DeletePatient (DeletePatientRequest)  returns (DeletePatientResponse);
+
+  rpc PredictSymptoms  (PredictSymptomsRequest)  returns (SymptomResponse);
+  rpc PredictHeart     (PredictHeartRequest)     returns (SpecificModelResponse);
+  rpc PredictDiabetes  (PredictDiabetesRequest)  returns (SpecificModelResponse);
+  rpc PredictEEG       (PredictEEGRequest)       returns (SpecificModelResponse);
+
+  rpc GetSettings    (GetSettingsRequest)    returns (Settings);
+  rpc UpdateSettings (UpdateSettingsRequest) returns (Settings);
+}
+
+message CreatePatientRequest {
+  string name  = 1;
+  int32  age   = 2;
+  string notes = 3;
+}
+
+message GetPatientRequest {
+  string id = 1;
+}
+
+message ListPatientsRequest {}
+
+message ListPatientsResponse {
+  repeated Patient patients = 1;
+}
+
+message UpdatePatientRequest {
+  string id    = 1;
+  string name  = 2;
+  int32  age   = 3;
+  string notes = 4;
+}
+
+message DeletePatientRequest {
+  string id = 1;
+}
+
+message DeletePatientResponse {
+  bool success = 1;
+}
+
+message PredictSymptomsRequest {
+  string          patient_id = 1;
+  SymptomFeatures features   = 2;
+}
+
+message PredictHeartRequest {
+  string        patient_id = 1;
+  HeartFeatures features   = 2;
+}
+
+message PredictDiabetesRequest {
+  string           patient_id = 1;
+  DiabetesFeatures features   = 2;
+}
+
+message PredictEEGRequest {
+  string      patient_id = 1;
+  EEGFeatures features   = 2;
+}
+
+message SymptomResponse {
+  string              record_id    = 1;
+  repeated TopKResult topk_results = 2;
+  bool                fhe_used     = 3;
+  int64               inference_ms = 4;
+}
+
+message SpecificModelResponse {
+  string    record_id    = 1;
+  ModelType model        = 2;
+  float     confidence   = 3;
+  bool      positive     = 4;
+  bool      fhe_used     = 5;
+  int64     inference_ms = 6;
+}
+
+message GetSettingsRequest {}
+
+message UpdateSettingsRequest {
+  Settings settings = 1;
+}

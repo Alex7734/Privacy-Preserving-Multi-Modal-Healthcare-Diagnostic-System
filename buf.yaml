@@ -1,0 +1,12 @@
+version: v2
+modules:
+  - path: proto
+deps: []
+  # google/protobuf/timestamp.proto comes from the protobuf well-known types,
+  # not from googleapis. No external deps needed.
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE
