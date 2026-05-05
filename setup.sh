@@ -25,16 +25,21 @@ ok()    { echo -e "${GREEN}[ok]${NC}    $*"; }
 warn()  { echo -e "${YELLOW}[warn]${NC}  $*"; }
 die()   { echo -e "${RED}[error]${NC} $*"; exit 1; }
 
+# ── Python (prefer venv) ──────────────────────────────────────────────────────
+PYTHON="venv/bin/python"
+UVICORN="venv/bin/uvicorn"
+[ -f "$PYTHON" ] || die "venv not found. Run: python3.11 -m venv venv && venv/bin/pip install -r requirements.txt"
+
 # ── Sanity checks ─────────────────────────────────────────────────────────────
-info "Checking Python + concrete-ml …"
-python -c "from concrete.ml.sklearn import XGBClassifier" 2>/dev/null \
-  || die "concrete-ml not found in current Python. Run: pyenv shell 3.11.0"
+info "Checking concrete-ml …"
+"$PYTHON" -c "from concrete.ml.sklearn import XGBClassifier" 2>/dev/null \
+  || die "concrete-ml not found. Run: venv/bin/pip install -r requirements.txt"
 ok "concrete-ml found"
 
 info "Checking symptom model …"
-if [ ! -f "models/symptom/fhe_circuit/server.zip" ]; then
+if [ ! -f "models/symptom/fhe_circuit_n3/server.zip" ]; then
   warn "Symptom FHE circuit missing. Training now (this takes ~30s) …"
-  PYTHONPATH=. python training/train_symptom.py --no-fhe
+  PYTHONPATH=. "$PYTHON" training/train_symptom.py --no-fhe
   ok "Symptom model trained"
 else
   ok "Symptom model present"
@@ -63,7 +68,7 @@ mkdir -p logs
 
 # ── Start inference_server (gRPC :8000) ───────────────────────────────────────
 info "Starting inference_server on :8000 …"
-python -m inference_server.main > logs/inference_server.log 2>&1 &
+"$PYTHON" -m inference_server.main > logs/inference_server.log 2>&1 &
 INFER_PID=$!
 echo $INFER_PID > logs/inference_server.pid
 
@@ -77,7 +82,7 @@ ok "inference_server up (PID $INFER_PID)"
 
 # ── Start client_service (FastAPI :8001) ──────────────────────────────────────
 info "Starting client_service on :8001 …"
-uvicorn client_service.main:app \
+"$UVICORN" client_service.main:app \
   --host 127.0.0.1 --port 8001 \
   --log-level info \
   > logs/client_service.log 2>&1 &
@@ -127,9 +132,4 @@ echo -e "  Logs:  ${YELLOW}tail -f logs/client_service.log${NC}"
 echo -e "         ${YELLOW}tail -f logs/inference_server.log${NC}"
 echo ""
 echo -e "  Stop:  ${RED}bash stop.sh${NC}"
-echo ""
-
-# ── First FHE key generation notice ──────────────────────────────────────────
-echo -e "${YELLOW}[note]${NC}  On the first 'Analyze' click, FHE key generation runs (~10–30s)."
-echo -e "        Eval keys are then cached for the session."
 echo ""

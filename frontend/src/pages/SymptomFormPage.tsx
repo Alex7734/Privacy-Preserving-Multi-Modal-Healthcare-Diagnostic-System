@@ -289,6 +289,22 @@ export default function SymptomFormPage() {
           </div>
         </div>
       )}
+
+      {result && result.topk_results.some(r => r.linked_model === 'eeg') && (
+        <div className="bg-purple-50 border border-purple-200 rounded-2xl p-5 flex items-start gap-4">
+          <Brain size={20} className="text-purple-600 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-purple-800 mb-1">Epilepsy flagged — EEG confirmation available</p>
+            <p className="text-xs text-purple-600 mb-3">The symptom model ranked an epilepsy-related condition in the top results. Upload an EEG window for a second, independent FHE-encrypted seizure-detection inference.</p>
+            <button
+              onClick={() => nav(`/patients/${id}/eeg`)}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-xl transition-colors"
+            >
+              <Brain size={12} /> Run EEG Analysis
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

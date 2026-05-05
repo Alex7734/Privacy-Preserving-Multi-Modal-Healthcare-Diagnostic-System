@@ -105,7 +105,7 @@ def train_sklearn_baseline(X_train, y_train, X_test, y_test):
     return {"accuracy": acc, "f1": f1, "auc": auc}
 
 
-def train_concrete_model(X_train, y_train, X_test, y_test, n_bits: int):
+def train_concrete_model(X_train, y_train, X_test, y_test, n_bits: int, run_fhe: bool = True):
     log.info(f"[n_bits={n_bits}] Training Concrete ML LogisticRegression …")
 
     model = ConcreteLR(n_bits=n_bits)
@@ -128,24 +128,30 @@ def train_concrete_model(X_train, y_train, X_test, y_test, n_bits: int):
     f1_sim  = f1_score(y_test, y_pred_sim)
     log.info(f"[n_bits={n_bits}] Simulated FHE accuracy: {acc_sim:.4f}  F1: {f1_sim:.4f}")
 
-    N_FHE_SAMPLES = 5
-    log.info(f"[n_bits={n_bits}] Running true FHE inference on {N_FHE_SAMPLES} samples …")
-    fhe_times = []
-    fhe_preds = []
-    for i in range(min(N_FHE_SAMPLES, len(X_test))):
-        sample = X_test[i : i + 1]
-        t0 = time.perf_counter()
-        pred = model.predict(sample, fhe="execute")
-        fhe_times.append(time.perf_counter() - t0)
-        fhe_preds.append(int(pred[0]))
+    latency_mean = None
+    latency_std  = None
+    acc_fhe_subset = None
+    N_FHE_SAMPLES = 0
 
-    latency_mean = float(np.mean(fhe_times))
-    latency_std  = float(np.std(fhe_times))
-    acc_fhe_subset = accuracy_score(y_test[:N_FHE_SAMPLES], fhe_preds)
-    log.info(
-        f"[n_bits={n_bits}] FHE latency: {latency_mean:.2f} ± {latency_std:.2f} s  "
-        f"|  FHE accuracy (subset {N_FHE_SAMPLES}): {acc_fhe_subset:.4f}"
-    )
+    if run_fhe:
+        N_FHE_SAMPLES = 5
+        log.info(f"[n_bits={n_bits}] Running true FHE inference on {N_FHE_SAMPLES} samples …")
+        fhe_times = []
+        fhe_preds = []
+        for i in range(min(N_FHE_SAMPLES, len(X_test))):
+            sample = X_test[i : i + 1]
+            t0 = time.perf_counter()
+            pred = model.predict(sample, fhe="execute")
+            fhe_times.append(time.perf_counter() - t0)
+            fhe_preds.append(int(pred[0]))
+
+        latency_mean = float(np.mean(fhe_times))
+        latency_std  = float(np.std(fhe_times))
+        acc_fhe_subset = accuracy_score(y_test[:N_FHE_SAMPLES], fhe_preds)
+        log.info(
+            f"[n_bits={n_bits}] FHE latency: {latency_mean:.2f} ± {latency_std:.2f} s  "
+            f"|  FHE accuracy (subset {N_FHE_SAMPLES}): {acc_fhe_subset:.4f}"
+        )
 
     return {
         "n_bits": n_bits,
@@ -163,8 +169,11 @@ def train_concrete_model(X_train, y_train, X_test, y_test, n_bits: int):
 
 
 def save_artefacts(model, scaler, n_bits: int):
+    import shutil
     circuit_dir = MODELS_DIR / f"fhe_circuit_n{n_bits}"
-    circuit_dir.mkdir(parents=True, exist_ok=True)
+    if circuit_dir.exists():
+        shutil.rmtree(circuit_dir)
+    circuit_dir.mkdir(parents=True)
 
     log.info(f"Saving FHE circuit to {circuit_dir} …")
     dev = FHEModelDev(path_dir=str(circuit_dir), model=model)
@@ -172,7 +181,9 @@ def save_artefacts(model, scaler, n_bits: int):
     log.info("FHE circuit saved.")
 
     default_dir = FHE_CIRCUIT_DIR
-    default_dir.mkdir(parents=True, exist_ok=True)
+    if default_dir.exists():
+        shutil.rmtree(default_dir)
+    default_dir.mkdir(parents=True)
     dev_default = FHEModelDev(path_dir=str(default_dir), model=model)
     dev_default.save()
     log.info(f"Default circuit also saved to {default_dir}.")
@@ -231,6 +242,10 @@ def main():
         "--save-n-bits", type=int, default=None,
         help="Which n_bits model to save as the default circuit (default: largest in sweep)",
     )
+    parser.add_argument(
+        "--no-fhe", action="store_true",
+        help="Skip true FHE timing (faster, good for quick iteration)",
+    )
     args = parser.parse_args()
 
     X, y = load_and_preprocess(Path(args.dataset))
@@ -245,7 +260,7 @@ def main():
     save_bits   = args.save_n_bits or max(args.n_bits)
 
     for nb in args.n_bits:
-        result = train_concrete_model(X_train, y_train, X_test, y_test, n_bits=nb)
+        result = train_concrete_model(X_train, y_train, X_test, y_test, n_bits=nb, run_fhe=not args.no_fhe)
         all_results.append(result)
         if nb == save_bits:
             best_model = result["model"]
@@ -262,12 +277,14 @@ def main():
     log.info("=" * 60)
     log.info(f"Sklearn baseline accuracy : {sklearn_metrics['accuracy']:.4f}")
     for r in all_results:
+        fhe_str = (f"fhe(n={r['fhe_n_samples']})={r['acc_fhe_true_subset']:.4f}  "
+                   f"latency={r['fhe_latency_mean_s']:.2f}s"
+                   if r['acc_fhe_true_subset'] is not None else "fhe=skipped")
         log.info(
             f"n_bits={r['n_bits']}  "
             f"clear={r['acc_cleartext']:.4f}  "
             f"sim={r['acc_fhe_simulate']:.4f}  "
-            f"fhe(n={r['fhe_n_samples']})={r['acc_fhe_true_subset']:.4f}  "
-            f"latency={r['fhe_latency_mean_s']:.2f}s  "
+            f"{fhe_str}  "
             f"compile={r['compilation_time_s']:.2f}s"
         )
     log.info(f"Default circuit saved at  : {FHE_CIRCUIT_DIR}")

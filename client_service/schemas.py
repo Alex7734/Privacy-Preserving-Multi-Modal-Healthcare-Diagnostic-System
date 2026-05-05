@@ -30,3 +30,25 @@ class UpdateSettingsBody(BaseModel):
 
 class GenerateKeysBody(BaseModel):
     n_bits: int = 3
+
+
+class HeartRequest(BaseModel):
+    age: float
+    sex: float
+    cp: float
+    trestbps: float
+    chol: float
+    fbs: float
+    restecg: float
+    thalach: float
+    exang: float
+    oldpeak: float
+    slope: float
+    ca: float
+    thal: float
+    n_bits: int = 8
+
+
+class EEGRequest(BaseModel):
+    eeg_window: list[float]  # 178 EEG amplitude samples
+    n_bits: int = 4

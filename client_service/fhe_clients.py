@@ -2,6 +2,7 @@ import logging
 import time
 from pathlib import Path
 from typing import NamedTuple
+import pickle
 
 import joblib
 import numpy as np
@@ -11,14 +12,21 @@ log = logging.getLogger(__name__)
 
 _MODELS_DIR = Path(__file__).parent.parent / "models"
 
-_SUPPORTED_N_BITS = [3, 4, 5]
+_SUPPORTED_N_BITS: dict[str, list[int]] = {
+    "symptom": [3, 4, 5],
+    "heart":   [8],
+    "eeg":     [4, 5],
+}
 
 _CIRCUIT_DIRS: dict[tuple[str, int], Path] = {
-    ("symptom", nb): _MODELS_DIR / "symptom" / f"fhe_circuit_n{nb}"
-    for nb in _SUPPORTED_N_BITS
+    **{("symptom", nb): _MODELS_DIR / "symptom" / f"fhe_circuit_n{nb}" for nb in _SUPPORTED_N_BITS["symptom"]},
+    **{("heart",   nb): _MODELS_DIR / "heart"   / f"fhe_circuit_n{nb}" for nb in _SUPPORTED_N_BITS["heart"]},
+    **{("eeg",     nb): _MODELS_DIR / "eeg"     / f"fhe_circuit_n{nb}" for nb in _SUPPORTED_N_BITS["eeg"]},
 }
 _PLAIN_DIRS = {
     "symptom": _MODELS_DIR / "symptom" / "plain_model",
+    "heart":   _MODELS_DIR / "heart"   / "plain_model",
+    "eeg":     _MODELS_DIR / "eeg"     / "plain_model",
 }
 
 
@@ -30,6 +38,7 @@ class _ClientEntry(NamedTuple):
 
 _clients: dict[tuple[str, int], _ClientEntry] = {}
 _label_encoders: dict[str, object] = {}
+_scalers: dict[str, object] = {}
 
 
 def _load_label_encoder(model_name: str):
@@ -41,6 +50,22 @@ def _load_label_encoder(model_name: str):
         _label_encoders[model_name] = le
         return le
     return None
+
+
+def get_scaler(model_name: str):
+    if model_name in _scalers:
+        return _scalers[model_name]
+    scaler_path = _MODELS_DIR / model_name / "scaler.pkl"
+    if scaler_path.exists():
+        with open(scaler_path, "rb") as f:
+            scaler = pickle.load(f)
+        _scalers[model_name] = scaler
+        return scaler
+    return None
+
+
+def supported_n_bits(model_name: str) -> list[int]:
+    return _SUPPORTED_N_BITS.get(model_name, [3])
 
 
 def get_or_create_client(model_name: str, n_bits: int) -> _ClientEntry:
@@ -95,6 +120,23 @@ def decrypt(model_name: str, n_bits: int, encrypted_result: bytes) -> np.ndarray
     return get_or_create_client(model_name, n_bits).client.deserialize_decrypt_dequantize(encrypted_result)
 
 
+def decode_binary_result(raw: np.ndarray, threshold: float = 0.5) -> dict:
+    arr = np.array(raw).flatten()
+    if arr.size > 1:
+        # FHE output is [score_class_0, score_class_1] so we use argmax, not threshold
+        # because dequantized logits may not sit in [0, 1].
+        positive = bool(int(np.argmax(arr)) == 1)
+        shifted = arr - arr.max()
+        exp = np.exp(shifted)
+        probs = exp / exp.sum()
+        confidence = float(probs[1]) if positive else float(probs[0])
+    else:
+        pos_prob = float(arr[0])
+        positive = pos_prob >= threshold
+        confidence = pos_prob if positive else 1.0 - pos_prob
+    return {"positive": positive, "confidence": confidence}
+
+
 def decode_symptom_topk(raw: np.ndarray, top_k: int, model_name: str = "symptom") -> list[dict]:
     le = _load_label_encoder(model_name)
     arr = np.array(raw).flatten()
@@ -124,7 +166,6 @@ def decode_symptom_topk(raw: np.ndarray, top_k: int, model_name: str = "symptom"
 
 def _condition_to_model_str(condition: str) -> str:
     lower = condition.lower()
-    if "diabetes" in lower:                                             return "diabetes"
     if "heart" in lower or "cardiac" in lower or "hypertension" in lower: return "heart"
-    if "epilepsy" in lower:                                             return "eeg"
+    if "epilepsy" in lower:                                               return "eeg"
     return ""

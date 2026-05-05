@@ -90,3 +90,34 @@ export const updateSettings = (s: Partial<Settings>)      => api.put<Settings>('
 
 export const getSymptomMetadata = () =>
   api.get<SymptomMetadata>('/model/symptom/metadata').then(r => r.data)
+
+export const BinaryResultSchema = z.object({
+  record_id: z.string(),
+  fhe_used: z.boolean(),
+  n_bits: z.number(),
+  inference_ms: z.number(),
+  positive: z.boolean(),
+  confidence: z.number(),
+})
+export type BinaryResult = z.infer<typeof BinaryResultSchema>
+
+export const predictHeart = (
+  patientId: string,
+  features: {
+    age: number; sex: number; cp: number; trestbps: number; chol: number
+    fbs: number; restecg: number; thalach: number; exang: number
+    oldpeak: number; slope: number; ca: number; thal: number
+  },
+  n_bits = 8
+) =>
+  api.post<BinaryResult>(`/patients/${patientId}/heart`, { ...features, n_bits }).then(r => r.data)
+
+export const predictEEG = (patientId: string, eeg_window: number[], n_bits = 4) =>
+  api.post<BinaryResult>(`/patients/${patientId}/eeg`, { eeg_window, n_bits }).then(r => r.data)
+
+export const getEEGMockSample = () =>
+  api.get<{ eeg_window: number[]; description: string; label_hint: string }>('/model/eeg/mock-sample').then(r => r.data)
+
+export type EEGSample = { eeg_window: number[]; description: string; label_hint: string }
+export const getEEGSamples = () =>
+  api.get<Record<string, EEGSample>>('/model/eeg/samples').then(r => r.data)

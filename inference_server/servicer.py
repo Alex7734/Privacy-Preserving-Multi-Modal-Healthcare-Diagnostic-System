@@ -1,4 +1,5 @@
 import logging
+import pickle
 import time
 import uuid
 from pathlib import Path
@@ -25,21 +26,29 @@ log = logging.getLogger(__name__)
 
 _MODELS_DIR = Path(__file__).parent.parent / "models"
 
-_SUPPORTED_N_BITS = [3, 4, 5]
+_SUPPORTED_N_BITS = [3, 4, 5, 8]
 
 _CIRCUIT_PATHS: dict[tuple[int, int], Path] = {
     (ModelType.MODEL_TYPE_SYMPTOM, nb): _MODELS_DIR / "symptom" / f"fhe_circuit_n{nb}"
-    for nb in _SUPPORTED_N_BITS
+    for nb in [3, 4, 5]
+} | {
+    (ModelType.MODEL_TYPE_HEART, nb): _MODELS_DIR / "heart" / f"fhe_circuit_n{nb}"
+    for nb in [8]
+} | {
+    (ModelType.MODEL_TYPE_EEG, nb): _MODELS_DIR / "eeg" / f"fhe_circuit_n{nb}"
+    for nb in [4, 5]
 }
+
 _PLAIN_DIRS = {
-    ModelType.MODEL_TYPE_SYMPTOM:  _MODELS_DIR / "symptom"  / "plain_model",
-    ModelType.MODEL_TYPE_HEART:    _MODELS_DIR / "heart"    / "plain_model",
-    ModelType.MODEL_TYPE_DIABETES: _MODELS_DIR / "diabetes" / "plain_model",
+    ModelType.MODEL_TYPE_SYMPTOM: _MODELS_DIR / "symptom" / "plain_model",
+    ModelType.MODEL_TYPE_HEART:   _MODELS_DIR / "heart"   / "plain_model",
+    ModelType.MODEL_TYPE_EEG:     _MODELS_DIR / "eeg"     / "plain_model",
 }
 
 _fhe_servers: dict[tuple[int, int], FHEModelServer] = {}
 _plain_models: dict[int, object] = {}
 _label_encoders: dict[int, object] = {}
+_scalers: dict[int, object] = {}
 
 
 def load_all_models() -> None:
@@ -53,7 +62,7 @@ def load_all_models() -> None:
             except Exception as exc:
                 log.warning("FHE circuit load failed (%s): %s", circuit_dir, exc)
         else:
-            log.warning("FHE circuit not found — run: python training/train_symptom.py --n-bits %d", n_bits)
+            log.warning("FHE circuit not found at %s — run the corresponding training script", circuit_dir)
 
     for model_type, plain_dir in _PLAIN_DIRS.items():
         model_file = plain_dir / "model.joblib"
@@ -70,6 +79,16 @@ def load_all_models() -> None:
                 log.info("LabelEncoder loaded: %s", le_file)
             except Exception as exc:
                 log.warning("LabelEncoder load failed: %s", exc)
+
+    for model_name, model_type in [("heart", ModelType.MODEL_TYPE_HEART), ("eeg", ModelType.MODEL_TYPE_EEG)]:
+        scaler_path = _MODELS_DIR / model_name / "scaler.pkl"
+        if scaler_path.exists():
+            try:
+                with open(scaler_path, "rb") as f:
+                    _scalers[model_type] = pickle.load(f)
+                log.info("Scaler loaded: %s", scaler_path)
+            except Exception as exc:
+                log.warning("Scaler load failed (%s): %s", scaler_path, exc)
 
 
 class FHEInferenceServicer(svc.FHEInferenceServiceServicer):
@@ -139,7 +158,13 @@ class FHEInferenceServicer(svc.FHEInferenceServiceServicer):
 
         t0 = time.time()
         which = request.WhichOneof("features")
-        X = np.array(_extract_features(request, which), dtype=np.float32).reshape(1, -1)
+        X_raw = np.array(_extract_features(request, which), dtype=np.float32).reshape(1, -1)
+
+        scaler = _scalers.get(model_type)
+        if scaler is not None:
+            X = scaler.transform(X_raw).astype(np.float32)
+        else:
+            X = X_raw
 
         if model_type == ModelType.MODEL_TYPE_SYMPTOM:
             top_k = getattr(request.symptom, "top_k", 5) or 5
@@ -162,10 +187,12 @@ class FHEInferenceServicer(svc.FHEInferenceServiceServicer):
 
         proba = plain_model.predict_proba(X)[0]
         pos = float(proba[1]) if len(proba) > 1 else float(proba[0])
+        positive = pos >= 0.5
+        confidence = pos if positive else 1.0 - pos
         return PlaintextInferenceResponse(
             model=model_type,
-            confidence=pos,
-            positive=pos >= 0.5,
+            confidence=confidence,
+            positive=positive,
             inference_ms=int((time.time() - t0) * 1000),
         )
 
@@ -175,10 +202,6 @@ def _extract_features(req: PlaintextInferenceRequest, which: str) -> list[float]
         f = req.heart
         return [f.age, f.sex, f.cp, f.trestbps, f.chol, f.fbs,
                 f.restecg, f.thalach, f.exang, f.oldpeak, f.slope, f.ca, f.thal]
-    if which == "diabetes":
-        f = req.diabetes
-        return [f.pregnancies, f.glucose, f.blood_pressure, f.skin_thickness,
-                f.insulin, f.bmi, f.diabetes_pedigree_function, f.age]
     if which == "eeg":
         return list(req.eeg.channels)
     if which == "symptom":
@@ -187,11 +210,10 @@ def _extract_features(req: PlaintextInferenceRequest, which: str) -> list[float]
 
 
 _CONDITION_MODEL_MAP = {
-    "diabetes":           ModelType.MODEL_TYPE_DIABETES,
-    "heart":              ModelType.MODEL_TYPE_HEART,
-    "cardiac":            ModelType.MODEL_TYPE_HEART,
-    "epilepsy":           ModelType.MODEL_TYPE_EEG,
-    "hypertension":       ModelType.MODEL_TYPE_HEART,
+    "heart":        ModelType.MODEL_TYPE_HEART,
+    "cardiac":      ModelType.MODEL_TYPE_HEART,
+    "epilepsy":     ModelType.MODEL_TYPE_EEG,
+    "hypertension": ModelType.MODEL_TYPE_HEART,
 }
 
 def _condition_to_model(condition: str) -> int:

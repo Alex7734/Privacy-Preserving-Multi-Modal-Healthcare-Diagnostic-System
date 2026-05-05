@@ -1,10 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, FlaskConical, ShieldCheck, ShieldOff, Clock, Cpu, CreditCard, FileText, Trash2, CheckCircle2, XCircle, Info } from 'lucide-react'
+import { ArrowLeft, FlaskConical, ShieldCheck, ShieldOff, Clock, Cpu, CreditCard, FileText, Trash2, CheckCircle2, XCircle, Info, ChevronDown, Heart, Brain, Activity } from 'lucide-react'
 import type { Patient, PredictionRecord } from '../api/client'
 import { getPatient, deleteRecord } from '../api/client'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { ageFromDob } from '../utils/date'
+
+const MODEL_TYPE_SYMPTOM = 'symptom'
+const MODEL_TYPE_HEART   = 'heart'
+const MODEL_TYPE_EEG     = 'eeg'
+
+function modelLabel(model: string): string {
+  if (model === MODEL_TYPE_SYMPTOM) return 'Symptom Analysis'
+  if (model === MODEL_TYPE_HEART)   return 'Heart Disease'
+  if (model === MODEL_TYPE_EEG)     return 'EEG Seizure'
+  return model
+}
 
 function RecordCard({ r, patientId, onDeleted }: { r: PredictionRecord; patientId: string; onDeleted: () => void }) {
   const [deleting,  setDeleting]  = useState(false)
@@ -25,7 +36,7 @@ function RecordCard({ r, patientId, onDeleted }: { r: PredictionRecord; patientI
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
       <div className="flex items-center gap-2 flex-wrap mb-4">
         <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
-          {r.model}
+          {modelLabel(r.model)}
         </span>
         {r.fhe_used ? (
           <>
@@ -116,6 +127,74 @@ function RecordCard({ r, patientId, onDeleted }: { r: PredictionRecord; patientI
   )
 }
 
+function NewAnalysisMenu({ patientId }: { patientId: string }) {
+  const nav = useNavigate()
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    if (open) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [open])
+
+  const options = [
+    {
+      label: 'Symptom Analysis',
+      description: 'XGBoost · 41 diseases',
+      icon: <Activity size={15} className="text-blue-600" />,
+      path: `/patients/${patientId}/symptoms`,
+    },
+    {
+      label: 'Heart Disease',
+      description: 'LogisticRegression · binary',
+      icon: <Heart size={15} className="text-red-500" />,
+      path: `/patients/${patientId}/heart`,
+    },
+    {
+      label: 'EEG Seizure',
+      description: 'MLP · binary',
+      icon: <Brain size={15} className="text-purple-600" />,
+      path: `/patients/${patientId}/eeg`,
+    },
+  ]
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl transition-colors shadow-sm"
+      >
+        <FlaskConical size={15} />
+        New Analysis
+        <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-60 bg-white border border-slate-200 rounded-2xl shadow-lg z-30 overflow-hidden">
+          {options.map(opt => (
+            <button
+              key={opt.path}
+              onClick={() => { setOpen(false); nav(opt.path) }}
+              className="w-full flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left border-b border-slate-100 last:border-0"
+            >
+              <span className="mt-0.5 shrink-0">{opt.icon}</span>
+              <div>
+                <p className="text-sm font-medium text-slate-800">{opt.label}</p>
+                <p className="text-xs text-slate-400">{opt.description}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function PatientDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [patient, setPatient] = useState<Patient | null>(null)
@@ -156,13 +235,7 @@ export default function PatientDetailPage() {
             {' · '}{sorted.length} analysis{sorted.length !== 1 ? 'es' : ''}
           </p>
         </div>
-        <button
-          onClick={() => nav(`/patients/${id}/symptoms`)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl transition-colors shadow-sm"
-        >
-          <FlaskConical size={15} />
-          New Analysis
-        </button>
+        <NewAnalysisMenu patientId={id!} />
       </div>
 
       {(patient.cnp || patient.medical_history || patient.date_of_birth) && (
